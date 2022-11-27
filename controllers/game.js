@@ -11,13 +11,13 @@ const drawCard = async (userName,) => {
     // Create a random card
     // Update player's hand on database
     // Return both players hand
-
 }
 
-// TODO - Inıt cards
-// TODO - Start game
-// TODO - Remove from route
-
+                                    //region TODOS
+                                    // TODO - Inıt cards
+                                    // TODO - Start game
+                                    // TODO - Remove from route
+                                    //endregion
 
 const startGame = async () => {
     // Create 5 random cards for each player
@@ -37,4 +37,4 @@ const isGameOver = () => {
 }
 
 
-module.exports = {drawCard, startGame, makeMove}
+module.exports = {drawCard, startGame, makeMove, isGameOver}
