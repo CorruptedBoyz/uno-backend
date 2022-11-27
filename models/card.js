@@ -1,17 +1,23 @@
 const mongoose = require('mongoose')
 
+
 const CardSchema = new mongoose.Schema({
     color: {
         type: String,
-        values: ["Red", "Yellow", "Blue", "Green", "Black"],
+        enum: ["Red", "Yellow", "Blue", "Green", "Black"],
         required: false
     },
     text: {
         type: String,
         required: false
     },
+    user: {
+        type: String,
+        required:true
+    }
 })
-CardSchema.create
+
+/// Random card generate
 CardSchema.pre('save', function () {
     let randomNumber = Math.floor(Math.random() * 112)
     let pickedCardColor;
@@ -34,7 +40,6 @@ CardSchema.pre('save', function () {
         const textValues = ["+2", "+4", "Wild"]
         pickedCardText = textValues[Math.floor(Math.random() * 3)]
     }
-
     this.color = pickedCardColor
     this.text = pickedCardText
 })
