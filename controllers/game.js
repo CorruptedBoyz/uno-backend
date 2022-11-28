@@ -9,7 +9,7 @@ GameParameters = {
 
 const drawCard = async (userName) => {
     // Check if player already drew a card this turn
-    const other = GameParameters.filter((name) => {
+    const other = GameParameters.Players.filter((name) => {
         return name !== userName
     })[0]
     const user = await Card.findOne({name: userName})
@@ -28,6 +28,7 @@ const drawCard = async (userName) => {
     otherUser.save()
     user.save()
 
+    // Return both players hand ???????????
 }
 
 const startGame = async (userName1, userName2) => {
@@ -40,7 +41,7 @@ const startGame = async (userName1, userName2) => {
     await Card.create({name: userName2.toString(), cards: userCards2})
 
     // Put a random card to the board
-    GameParameters.CardOnBoard = createRandomCard()
+    GameParameters.CardOnBoard = {color: "Yellow", text: 5}
 
     // Set GameParameters
     GameParameters.Started(true)
@@ -60,7 +61,6 @@ const makeMove = async (userName, card) => {
     // Update player's hand on database
     await Card.collection.updateOne({_id: user._id}, {$pull: {'cards': card}})
     const handSize = await Card.findOne({name: userName})
-
     // Return player's hand and size
 
     isGameOver(handSize.cards.length)
@@ -82,7 +82,7 @@ const isGameOver = async (handSize) => {
 }
 
 const createRandomCard = (count = 1) => {
-    let randomCards = []
+    let cardStack = []
     for (let i = 0; i < count; i++) {
         let randomNumber = Math.floor(Math.random() * 112)
         let color;
@@ -105,9 +105,9 @@ const createRandomCard = (count = 1) => {
             const textValues = ["+2", "+4", "Wild"]
             text = textValues[Math.floor(Math.random() * 3)]
         }
-        randomCards.push({color, text})
+        cardStack.push({color, text})
     }
-    return randomCards
+    return cardStack
 }
 
-module.exports = {drawCard, startGame, makeMove}
+module.exports = {drawCard, startGame, makeMove, isGameOver}
