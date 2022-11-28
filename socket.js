@@ -1,7 +1,6 @@
 const {Server} = require('socket.io')
-const Game = require('./controllers/game')
-const Card = require('./models/card')
-                                                         // TODO - Send data to "Game"
+const {startGame,makeMove,drawCard,GameParameters, Deneme} = require('./controllers/game')
+                                                         //TODO - Socket functions - game
 function socketServer(server) {
     const io = new Server(server, {
         cors: {
@@ -27,15 +26,19 @@ function socketServer(server) {
                 socket.emit('error', e.message)
             }
         })
-        socket.on('game start', (data) => {
+        socket.on('game start', async (data) => {
             try {
-                console.log("Game Started")
+              await startGame(data.user1,data.user2)
             } catch (e) {
                 socket.emit('error', e.message)
             }
         })
         socket.on('disconnect', async () => {
-            await Card.deleteMany()
+            //await Card.deleteMany()
+        })
+
+        socket.on('deneme', ()=>{
+        Deneme()
         })
     })
 }
