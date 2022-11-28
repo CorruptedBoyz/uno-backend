@@ -28,7 +28,6 @@ const drawCard = async (userName) => {
     otherUser.save()
     user.save()
 
-    // Return both players hand ???????????
 }
 
 const startGame = async (userName1, userName2) => {
@@ -61,8 +60,7 @@ const makeMove = async (userName, card) => {
     // Update player's hand on database
     await Card.collection.updateOne({_id: user._id}, {$pull: {'cards': card}})
     const handSize = await Card.findOne({name: userName})
-    // Return player's hand and size
-
+ 
     isGameOver(handSize.cards.length)
 }
 
