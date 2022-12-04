@@ -72,10 +72,6 @@ const makeMove = async (userName, card) => {
 
     // Update player's hand on database
     await Card.collection.updateOne({_id: user._id}, {$pull: {'cards': card}}) // TODO - user.save ile yapmayı dene
-    // const userUpdated = await Card.findOne({name: userName}) //TODO - Is it necesssary ???
-
-    // Return player's hand and size
-
 
 }
 
@@ -102,7 +98,6 @@ const isGameOver = async (userName) => {
     // Save/Remove previous game cards
     await Card.collection.drop()
 
-    // End the game                TODO - End game
     return true
 }
 

@@ -15,12 +15,11 @@ const CardSchema = new mongoose.Schema({
             }
         },
         drewCard: {
-            type: Boolean,      // TODO - ????
+            type: Boolean,
             default: false
         }
 
     }
 )
-
 
 module.exports = mongoose.model('Card', CardSchema)

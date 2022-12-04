@@ -71,6 +71,7 @@ function socketServer(server) {
                 socket.emit('error',e.message)
             }
         })
+
         socket.on('pass turn', async ()=>{
             try{
                 await passTurn(socket.data.userName)
