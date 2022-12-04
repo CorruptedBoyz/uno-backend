@@ -8,7 +8,6 @@ async function register(req, res) {
 }
 
 async function login(req, res, next) {
-    console.log(req.body)
 
     const {userName, password} = req.body
 
