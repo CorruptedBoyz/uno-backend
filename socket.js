@@ -1,5 +1,5 @@
 const {Server} = require('socket.io')
-const {createPlayer,passTurn, drawCard, makeMove, getGameDetails, startGame, isGameOver} = require('./controllers/game')
+const {createPlayer,passTurn, drawCard, makeMove, getGameDetails, startGame, isGameOver,dropGameParameters} = require('./controllers/game')
 
 
 async function sendGameDetail(socket,type) {
@@ -8,7 +8,7 @@ async function sendGameDetail(socket,type) {
     switch (type){
         case 'start':
             try {
-                socket.emit('start game', data);
+                socket.emit('start game',data);
             } catch (e) {
                 socket.emit('error',e.message)
             }
@@ -17,6 +17,14 @@ async function sendGameDetail(socket,type) {
         case 'update':
             try {
                 socket.emit('game', data)
+            } catch (e) {
+                socket.emit('error',e.message)
+            }
+            break;
+
+        case 'end':
+            try{
+                socket.emit('game over',`Game over ${socket.data.userName} wins!`)
             } catch (e) {
                 socket.emit('error',e.message)
             }
@@ -34,16 +42,16 @@ function socketServer(server) {
 
     let sockets = []
 
-    io.on("connection", (socket) => {
+    io.on("connection",  (socket) => {
         console.log("Socket connected")
-
+        // await dropGameParameters()
         socket.on('set user', async (data) => {
             try {
                 socket.data.userName = data.userName
                 sockets.push(socket)
-                if (createPlayer(data.userName)) {
+                if (await createPlayer(data.userName)) {
                     await startGame()
-                    sockets.forEach(item => sendGameDetail(item,'start'))
+                    sockets.map(async item => await sendGameDetail(item,'start'))
                 }
             } catch (e) {
                 socket.emit('error', e.message)
@@ -54,9 +62,9 @@ function socketServer(server) {
             try {
                 await makeMove(socket.data.userName, data.card)
                 if (await isGameOver(socket.data.userName)) {
-                    socket.emit('game over', `Game Over ${data.userName} wins`)
+                    sockets.map(async item => await sendGameDetail(item,'end'))
                 } else {
-                    sockets.forEach(item => sendGameDetail(item,'update'))
+                    sockets.map(async item =>await sendGameDetail(item,'update'))               // TODO - Sync-Async Test et
                 }
             } catch (e) {
                 socket.emit('error', e.message)
@@ -66,7 +74,7 @@ function socketServer(server) {
         socket.on('draw card', async () => {
             try {
                 await drawCard(socket.data.userName)
-                sockets.forEach(item => sendGameDetail(item,'update'))
+                sockets.map(item => sendGameDetail(item,'update'))
             } catch (e) {
                 socket.emit('error',e.message)
             }
@@ -75,7 +83,7 @@ function socketServer(server) {
         socket.on('pass turn', async ()=>{
             try{
                 await passTurn(socket.data.userName)
-                sockets.forEach(item => sendGameDetail(item,'update'))
+                sockets.map(item => sendGameDetail(item,'update'))
             }
             catch (e){
                 socket.emit('error',e.message)

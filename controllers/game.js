@@ -1,104 +1,120 @@
 const Card = require('../models/card')
+const GameParameters = require('../models/gameParameters')
 
-GameParameters = {
-    Turn: "",
-    Started: false,
-    Players: [],
-    CardOnBoard: null,
-}
 
 const startGame = async () => {
-    await Card.collection.drop()
     console.log("Game Started")
+    await Card.collection.drop()
+
     // Create 5 random cards for each player
     const userCards1 = createRandomCard(5)
     const userCards2 = createRandomCard(5)
 
-    // Initialize players hand and write to database
-    const userName1 = GameParameters.Players[0]
-    const userName2 = GameParameters.Players[1]
-    await Card.create({name: userName1.toString(), cards: userCards1})
-    await Card.create({name: userName2.toString(), cards: userCards2})
-
+    // Initialize players hands, GameParameters and write to database           // TODO - Card koleksiyonunu GameParameters içine al ??
+    const GameParameter = await GameParameters.findOne({})
+    const userName1 = GameParameter.players[0]
+    const userName2 = GameParameter.players[1]
+    await Card.create({name: userName1, cards: userCards1})
+    await Card.create({name: userName2, cards: userCards2})
     // Put a random card to the board
-    GameParameters.CardOnBoard = createRandomCard()[0]
+    GameParameter.cardOnBoard = createRandomCard()[0]
 
     // Set GameParameters
-    GameParameters.Started = true
-    GameParameters.Turn = makeTurn()
+    GameParameter.started = true
+    GameParameter.turn = GameParameter.players[makeTurn()]
 
-    // Return userhands and card on the board
+    await GameParameter.save();
 }
 
 const drawCard = async (userName) => {
     // Check if player already drew a card this turn
-    if (GameParameters.Turn !== userName) {
+    const GameParameter = await GameParameters.findOne({})
+
+    if (GameParameter.turn !== userName) {
         throw Error("It's not your turn")
     }
-    const other = getOtherUser(userName)
+
     const user = await Card.findOne({name: userName})
-    const otherUser = await Card.findOne({name: other})
+
     if (user.drewCard) {
         throw Error("You cannot draw more than once in a turn")
     }
 
+    const other = await getOtherUser(userName)
+    const otherUser = await Card.findOne({name: other})
+
     // Create a random card
-    const randomCard = createRandomCard()[0]
+    const randomCards = createRandomCard(GameParameter.currentBid + 1)
+    GameParameter.currentBid = 0
 
     // Update both player's hand on database
-    user.cards.push(Object.assign({}, randomCard))
+    user.cards.push(...randomCards)
     user.drewCard = true
     otherUser.drewCard = false;
     otherUser.save()
-    user.save()               // TODO - kart çekme işlemini make move da yap
+    user.save()
 
-    // Return both players hand ???????????
-    return {}
 }
 
 const makeMove = async (userName, card) => {
-    // Check if the card can be played throw error if not
+    const GameParameter = await GameParameters.findOne({})
+
     const user = await Card.findOne({name: userName})
 
-    if (GameParameters.Turn !== userName) {
-        throw Error("It's not your turn")
-    }
-    if (card.color !== "Black" && card.color !== GameParameters.CardOnBoard.color && card.text !== GameParameters.CardOnBoard.text) {
-        throw Error("You cannot play this card")
+    // Validate move
+    validatePlayedCard({userInfo: user, playedCard: card, gameParameters: GameParameter})
+
+    // Remove the card from user's hand
+    for (let i = 0; i < user.cards.length; i++) {
+        if (user.cards[i].text === card.text && user.cards[i].color === card.color) {
+            user.cards.splice(i, 1);
+            break;
+        }
     }
 
-    GameParameters.CardOnBoard = card
-    GameParameters.Turn = getOtherUser(userName)
+    // If the card is black
+    if (card.color === "Black") {
+        switch (card.text) {
+            case "Wild":
+                card = {color: card.choosenColor, text: card.text}
+                break;
+            case "+2":
+                card = {color: card.choosenColor, text: card.text}
+                GameParameter.currentBid += Number(card.text)
+                break;
+            case "+4":
+                card = {color: card.choosenColor, text: card.text}
+                GameParameter.currentBid += Number(card.text)
+                break;
+        }
+    }
 
-    // Update player's hand on database
-    await Card.collection.updateOne({_id: user._id}, {$pull: {'cards': card}}) // TODO - user.save ile yapmayı dene
+    if(GameParameter.currentBid !== 0 && (card.text !=="+2" || card.text !=="+4") ){
+        user.cards.push(...createRandomCard(GameParameter.currentBid))
+    }
+
+    // Change GameParameters
+    GameParameter.cardOnBoard = card
+    GameParameter.turn = await getOtherUser(userName)
+
+    // Save changes on database
+    GameParameter.save({new: true})
+    user.save({new: true})
 
 }
 
 const passTurn = async (userName) => {
-    GameParameters.Turn = getOtherUser(userName)
+    const GameParameter = await GameParameters.findOne({})
 
-    await Card.findOneAndUpdate({name:userName},{drewCard:false})
-}
-
-const isGameOver = async (userName) => {
-    // Check if any of the players hand is empty after a move
-    const user = await Card.findOne({name: userName})
-
-    const handSize = user.cards.length
-    if (handSize !== 0) {
-        return false
+    if (GameParameter.currentBid !== 0) {
+        await drawCard(userName)                                  // TODO - await ???
+        return
     }
-    console.log("Alert")
 
-    // Set Started false
-    GameParameters.Started = false
-    GameParameters.Turn = ""
+    GameParameter.turn = await getOtherUser(userName)
 
-    // Save/Remove previous game cards
-    await Card.collection.drop()
-
-    return true
+    GameParameter.save()
+    await Card.findOneAndUpdate({name: userName}, {drewCard: false})
 }
 
 const createRandomCard = (count = 1) => {
@@ -130,37 +146,97 @@ const createRandomCard = (count = 1) => {
     return cardStack
 }
 
-const createPlayer = (userName) => {
-    if (GameParameters.Players.length < 2) {
-        GameParameters.Players.push(userName)
-    } else {
-        throw  Error("No more room")
+const validatePlayedCard = ({userInfo, playedCard, gameParameters}) => {
+
+    if (gameParameters.turn !== userInfo.name) {
+        throw Error("It's not your turn")
     }
-    return GameParameters.Players.length === 2
+
+    const userHasTheCard = userInfo.cards.find(element => {
+        return playedCard.color === element.color &&
+            playedCard.text === element.text;
+    })
+
+    if (!userHasTheCard) {
+        throw Error("Don't cheat play fair")
+    }
+
+    if (playedCard.color !== "Black" && playedCard.text !== gameParameters.cardOnBoard.text && playedCard.color !== gameParameters.cardOnBoard.color) {
+        throw Error("You cannot play this card")
+    }
+}
+
+const getOtherUser = async (userName) => {
+    const GameParameter = await GameParameters.findOne({})
+    return GameParameter.players.filter((name) => {
+        return name !== userName
+    })[0]
+
+
 }
 
 const makeTurn = () => {
-    return GameParameters.Players[Math.floor(Math.random()) * 2]
+    return Math.floor(Math.random() * 2)
+}
+
+const createPlayer = async (userName) => {
+
+    try {
+        const GameParameter = await GameParameters.findOne({})
+        if (GameParameter.players.length < 2) {
+            GameParameter.players.push(userName)
+        }
+        GameParameter.save()
+
+        return GameParameter.players.length === 2
+
+    } catch (e) {
+        await GameParameters.create({players: userName})
+        return false
+    }
+
+
+}
+
+const isGameOver = async (userName) => {
+    // Check if any of the players hand is empty after a move
+    const userHandSize = (await Card.findOne({name: userName})).cards.length
+
+    if (userHandSize !== 0) {
+        return false
+    }
+
+    const GameParameter = await GameParameters.findOne({})
+
+    // Set Started false
+    GameParameter.started = false
+    GameParameter.turn = ""
+
+    // Save/Remove previous game cards
+    GameParameter.save()                        // TODO - Alternatif olarak  GameParameter.collection.drop()
+    await Card.collection.drop()
+
+    return true
 }
 
 const getGameDetails = async (userName) => {
+    const GameParameter = await GameParameters.findOne({})
 
-    const cardOnBoard = GameParameters.CardOnBoard
-    const turn = GameParameters.Turn
-    const otherUser = GameParameters.Players.filter(x => x !== userName)[0]
+    const cardOnBoard = GameParameter.cardOnBoard
+    const turn = GameParameter.turn
+    const otherUser = await getOtherUser(userName)
+
+
     const handSize = (await Card.findOne({name: otherUser})).cards.length
     const user = (await Card.findOne({name: userName})).cards
 
     return {cardOnBoard, turn, handSize, user}
 }
 
-const getOtherUser = (userName) => {
-    const other = GameParameters.Players.filter((name) => {
-        return name !== userName
-    })[0]
-
-    return other
+const dropGameParameters = async () => {
+    await GameParameters.collection.drop()
+    await Card.collection.drop()
 }
 
 
-module.exports = {drawCard, isGameOver, getGameDetails, makeMove, createPlayer, startGame,passTurn}
+module.exports = {drawCard, isGameOver, dropGameParameters, getGameDetails, makeMove, createPlayer, startGame, passTurn}
