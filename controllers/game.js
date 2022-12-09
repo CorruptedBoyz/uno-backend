@@ -16,8 +16,14 @@ const startGame = async () => {
     const userName2 = GameParameter.players[1]
     await Card.create({name: userName1, cards: userCards1})
     await Card.create({name: userName2, cards: userCards2})
+
     // Put a random card to the board
-    GameParameter.cardOnBoard = createRandomCard()[0]
+    let candidateCard;
+    do
+        candidateCard = createRandomCard()[0]
+    while (candidateCard.color === ("Black" || "Combo"))
+
+    GameParameter.cardOnBoard = candidateCard
 
     // Set GameParameters
     GameParameter.started = true
@@ -51,8 +57,9 @@ const drawCard = async (userName) => {
     user.cards.push(...randomCards)
     user.drewCard = true
     otherUser.drewCard = false;
-    otherUser.save()
-    user.save()
+    await GameParameter.save()
+    await otherUser.save()
+    await user.save()
 
 }
 
@@ -72,11 +79,21 @@ const makeMove = async (userName, card) => {
         }
     }
 
+    // If the card is non-black and there is a currentBid
+    if (GameParameter.currentBid !== 0 && (card.text !== "+2" || card.text !== "+4")) {
+        user.cards.push(...createRandomCard(GameParameter.currentBid))
+        GameParameter.currentBid = 0
+    }
+
     // If the card is black
     if (card.color === "Black") {
         switch (card.text) {
             case "Wild":
                 card = {color: card.choosenColor, text: card.text}
+                if (GameParameter.currentBid !== 0) {
+                    user.cards.push(...createRandomCard(GameParameter.currentBid))
+                    GameParameter.currentBid = 0
+                }
                 break;
             case "+2":
                 card = {color: card.choosenColor, text: card.text}
@@ -89,38 +106,40 @@ const makeMove = async (userName, card) => {
         }
     }
 
-    if(GameParameter.currentBid !== 0 && (card.text !=="+2" || card.text !=="+4") ){
-        user.cards.push(...createRandomCard(GameParameter.currentBid))
+    if (card.text!=="Combo!"){
+        GameParameter.turn = await getOtherUser(userName)
     }
 
     // Change GameParameters
     GameParameter.cardOnBoard = card
-    GameParameter.turn = await getOtherUser(userName)
 
     // Save changes on database
-    GameParameter.save({new: true})
-    user.save({new: true})
+    await GameParameter.save()
+    await user.save()
 
 }
 
 const passTurn = async (userName) => {
     const GameParameter = await GameParameters.findOne({})
 
+    if (GameParameter.turn !== userName) {
+        throw Error("It's not your turn")
+    }
     if (GameParameter.currentBid !== 0) {
-        await drawCard(userName)                                  // TODO - await ???
+        await drawCard(userName)
         return
     }
 
     GameParameter.turn = await getOtherUser(userName)
 
-    GameParameter.save()
+    await GameParameter.save()
     await Card.findOneAndUpdate({name: userName}, {drewCard: false})
 }
 
 const createRandomCard = (count = 1) => {
     let cardStack = []
     for (let i = 0; i < count; i++) {
-        let randomNumber = Math.floor(Math.random() * 112)
+        let randomNumber = Math.floor(Math.random() * 120) //112
         let color;
         let text;
 
@@ -136,7 +155,8 @@ const createRandomCard = (count = 1) => {
             color = "Black"
         }
         if (color !== "Black") {
-            text = Math.floor(Math.random() * 10).toString()
+            const randomTextNumber = Math.floor(Math.random() * 12)
+            randomTextNumber < 10 ? text = randomTextNumber.toString() : text = "Combo!"
         } else {
             const textValues = ["+2", "+4", "Wild"]
             text = textValues[Math.floor(Math.random() * 3)]
@@ -180,13 +200,13 @@ const makeTurn = () => {
 }
 
 const createPlayer = async (userName) => {
-
     try {
         const GameParameter = await GameParameters.findOne({})
         if (GameParameter.players.length < 2) {
             GameParameter.players.push(userName)
         }
-        GameParameter.save()
+
+        await GameParameter.save()
 
         return GameParameter.players.length === 2
 
@@ -206,14 +226,9 @@ const isGameOver = async (userName) => {
         return false
     }
 
-    const GameParameter = await GameParameters.findOne({})
-
-    // Set Started false
-    GameParameter.started = false
-    GameParameter.turn = ""
-
     // Save/Remove previous game cards
-    GameParameter.save()                        // TODO - Alternatif olarak  GameParameter.collection.drop()
+    const GameParameter = await GameParameters.findOne({})
+    await GameParameter.collection.drop()
     await Card.collection.drop()
 
     return true
@@ -233,10 +248,6 @@ const getGameDetails = async (userName) => {
     return {cardOnBoard, turn, handSize, user}
 }
 
-const dropGameParameters = async () => {
-    await GameParameters.collection.drop()
-    await Card.collection.drop()
-}
 
 
-module.exports = {drawCard, isGameOver, dropGameParameters, getGameDetails, makeMove, createPlayer, startGame, passTurn}
+module.exports = {drawCard, isGameOver, getGameDetails, makeMove, createPlayer, startGame, passTurn}
